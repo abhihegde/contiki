@@ -85,6 +85,9 @@ typedef uint16_t rpl_ocp_t;
 #define RPL_DAG_MC_ENERGY_TYPE_BATTERY		1
 #define RPL_DAG_MC_ENERGY_TYPE_SCAVENGING	2
 
+#define MAX_PS_NEIGHBOURS 20
+#define MULTI_PATH_ROUTING 1
+
 struct rpl_metric_object_energy {
   uint8_t flags;
   uint8_t energy_est;
@@ -140,6 +143,11 @@ struct rpl_dag {
   /* live data for the DAG */
   uint8_t joined;
   rpl_parent_t *preferred_parent;
+  #ifdef MULTI_PATH_ROUTING
+  rpl_parent_t *parent_sibling_list[MAX_PS_NEIGHBOURS];
+  
+  #endif
+  
   rpl_rank_t rank;
   struct rpl_instance *instance;
   LIST_STRUCT(parents);

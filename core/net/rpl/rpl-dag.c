@@ -689,6 +689,7 @@ rpl_select_dag(rpl_instance_t *instance, rpl_parent_t *p)
   return best_dag;
 }
 /*---------------------------------------------------------------------------*/
+/*
 rpl_parent_t *
 rpl_select_parent(rpl_dag_t *dag)
 {
@@ -696,10 +697,11 @@ rpl_select_parent(rpl_dag_t *dag)
 
   best = NULL;
 
+  // best here is the rpl_parent selected
   p = nbr_table_head(rpl_parents);
   while(p != NULL) {
     if(p->rank == INFINITE_RANK) {
-      /* ignore this neighbor */
+      // ignore this neighbor 
     } else if(best == NULL) {
       best = p;
     } else {
@@ -709,6 +711,58 @@ rpl_select_parent(rpl_dag_t *dag)
   }
 
   if(best != NULL) {
+    rpl_set_preferred_parent(dag, best);
+  }
+
+  return best;
+}
+*/
+
+extern uint16_t p1_cnt;
+extern uint16_t node_id;
+extern uint16_t ps_pathMetricVal[MAX_PS_NEIGHBOURS];
+
+rpl_parent_t *
+rpl_select_parent(rpl_dag_t *dag)
+{
+  rpl_parent_t *p, *best;
+  uip_ipaddr_t *ptrIPaddr;
+  int i = 0;
+  best = NULL;
+  
+  p1_cnt = 0;
+  memset(ps_pathMetricVal, 0, MAX_PS_NEIGHBOURS);
+  memset(dag->parent_sibling_list,NULL,MAX_PS_NEIGHBOURS);
+  
+  // best here is the rpl_parent selected
+  p = nbr_table_head(rpl_parents);
+  while(p != NULL) {
+    if(p->rank == INFINITE_RANK) {
+      /* ignore this neighbor */
+    } else if(best == NULL) {
+      best = p;
+    } else {
+	  ptrIPaddr = rpl_get_parent_ipaddr(p);
+	  //printf("\nbefore best_parent -> parent id:%u",(uint8_t*)(ptrIPaddr->u8)[15]);
+      best = dag->instance->of->best_parent(p,NULL);
+	  // best value is dummy, not used
+    }
+    p = nbr_table_next(rpl_parents, p);
+  }
+  
+  printf("\n MULTIPATH: Nodeid: %d, No: of PS nodes: %d",node_id,p1_cnt);
+  for(i = 0; i < p1_cnt; i++)
+  {	  
+	  //print the parent nodes list
+	  ptrIPaddr = rpl_get_parent_ipaddr(dag->parent_sibling_list[i]);
+	  printf("\n MULTIPATH:parent id:%u",(uint8_t*)(ptrIPaddr->u8)[15]);
+	  //print the path metric values
+	  printf("\n MULTIPATH:parent path metric:%d",ps_pathMetricVal[i]);	  
+  }
+  
+  best = dag->parent_sibling_list[0];
+  if(best != NULL) {
+	printf("\n MULTIPATH:rpl_select_parent: sets preferred parent");
     rpl_set_preferred_parent(dag, best);
   }
 
@@ -1213,7 +1267,7 @@ rpl_process_dio(uip_ipaddr_t *from, rpl_dio_t *dio)
   p = rpl_find_parent(dag, from);
   if(p == NULL) {
     previous_dag = find_parent_dag(instance, from);
-    if(previous_dag == NULL) {
+    if(previous_dag == NULL) { /* The new DIO node is not part of any DAG, so add it to the current child dag*/
       /* Add the DIO sender as a candidate parent. */
       p = rpl_add_parent(dag, dio, from);
       if(p == NULL) {
@@ -1225,13 +1279,13 @@ rpl_process_dio(uip_ipaddr_t *from, rpl_dio_t *dio)
       PRINTF("RPL: New candidate parent with rank %u: ", (unsigned)p->rank);
       PRINT6ADDR(from);
       PRINTF("\n");
-    } else {
+    } else { /* Parent P has updated its dag from previous_dag(the current node had stored dag in previous time) to "dag" (dag found from the incoming node)so we need to move it */
       p = rpl_find_parent(previous_dag, from);
       if(p != NULL) {
         rpl_move_parent(previous_dag, dag, p);
       }
     }
-  } else {
+  } else { /* parent dag from previous time and dag from dio for this parent is same, ie consistent) */
     if(p->rank == dio->rank) {
       PRINTF("RPL: Received consistent DIO\n");
       if(dag->joined) {

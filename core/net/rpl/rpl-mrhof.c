@@ -177,15 +177,64 @@ best_dag(rpl_dag_t *d1, rpl_dag_t *d2)
   return d1->rank < d2->rank ? d1 : d2;
 }
 
+uint16_t ps_pathMetricVal[MAX_PS_NEIGHBOURS];
+int p1_cnt = 0;
+
 static rpl_parent_t *
 best_parent(rpl_parent_t *p1, rpl_parent_t *p2)
 {
+  #ifdef MULTI_PATH_ROUTING
+  
+  rpl_dag_t *dag;
+  rpl_rank_t currNodeRank;
+  rpl_path_metric_t p1_metric;
+  rpl_path_metric_t tmpP_metric;
+  rpl_parent_t *tmp_Rpl_Parent;
+  
+  int i,j = 0;
+  //rpl_path_metric_t p2_metric; //p2 is dummy here
+  printf("\nMULTIPATH: In MULTI_PATH_ROUTING (best_parent)");
+  dag = p1->dag; // Both parents are in the same DAG. 
+  currNodeRank = dag->rank;
+  
+  if(p1->rank <= currNodeRank)
+  {
+	p1_metric = calculate_path_metric(p1);
+	ps_pathMetricVal[p1_cnt] = p1_metric;
+	dag->parent_sibling_list[p1_cnt] = p1;
+	p1_cnt++;
+	
+	if(p1_cnt > 1)
+    {
+	  for (i = 1; i < p1_cnt; i++) 
+	  {
+         tmpP_metric = ps_pathMetricVal[i];
+		 tmp_Rpl_Parent = dag->parent_sibling_list[i];
+         j = i - 1;
+         while ((tmpP_metric < ps_pathMetricVal[j]) && (j >= 0)) 
+		 {
+            ps_pathMetricVal[j + 1] = ps_pathMetricVal[j];
+			dag->parent_sibling_list[j + 1] = dag->parent_sibling_list[j];
+            j = j - 1;
+         }
+		 dag->parent_sibling_list[j + 1] = tmp_Rpl_Parent;
+         ps_pathMetricVal[j + 1] = tmpP_metric;
+      }
+    }
+	
+	return p1;
+	
+  }    
+  else{return NULL;}
+  
+  #else
   rpl_dag_t *dag;
   rpl_path_metric_t min_diff;
   rpl_path_metric_t p1_metric;
   rpl_path_metric_t p2_metric;
 
-  dag = p1->dag; /* Both parents are in the same DAG. */
+  dag = p1->dag; // Both parents are in the same DAG. 
+  
 
   min_diff = RPL_DAG_MC_ETX_DIVISOR /
              PARENT_SWITCH_THRESHOLD_DIV;
@@ -193,7 +242,7 @@ best_parent(rpl_parent_t *p1, rpl_parent_t *p2)
   p1_metric = calculate_path_metric(p1);
   p2_metric = calculate_path_metric(p2);
 
-  /* Maintain stability of the preferred parent in case of similar ranks. */
+  // Maintain stability of the preferred parent in case of similar ranks. 
   if(p1 == dag->preferred_parent || p2 == dag->preferred_parent) {
     if(p1_metric < p2_metric + min_diff &&
        p1_metric > p2_metric - min_diff) {
@@ -206,6 +255,7 @@ best_parent(rpl_parent_t *p1, rpl_parent_t *p2)
   }
 
   return p1_metric < p2_metric ? p1 : p2;
+  #endif
 }
 
 #if RPL_DAG_MC == RPL_DAG_MC_NONE
